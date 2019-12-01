@@ -2,528 +2,505 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define BLOCK 100000
-#define BLOCK_SZIE 10000
+#define BYTE unsigned char
+#define BLOCK 16
 
-typedef struct directory{
-	char name[20];
-	int dir_p;
-	int data_p;
-	struct directory *upper;
-	struct directory *deep;
-	struct directory *next;
-	struct data *data;
-}DIR;
+void ExpandKey(BYTE *bKey,BYTE i);
+void init(int argc , char *argv[]);
+void readArg(int argc, char *argv[]);
 
-typedef struct data{
-	char name[20];
-	int location;
-	struct data *next;
-}DATA;
+void SubBytes(BYTE buffer[]);
+void SubBytesInv(BYTE buffer[]);
+void ShiftRows(BYTE buffer[]);
+void ShiftRowsInv(BYTE buffer[]);
+void MixColumns(BYTE state[]);
+void MixColumnsInv(BYTE state[]);
+void AddRoundKey(BYTE buffer[]);
 
-void analysis(char input[50],char command[20],char parameter[30]){
-	char i = 0;
-	char c = -1;
-	char count = 0;
-	while(1){
-		c = input[i++];
-		if (c == 32){
-			command[count++] = 0;
-			break;
-		}
-		if (c == 0){
-			command[count++] = 0;
-			return;
-		}
-		command[count++] = c;
-	}
-	count = 0;
-	while(1){
-		c = input[i++];
-		if (c == 32){
-			parameter[count++] = 0;
-			break;
-		}
-		if (c == 0){
-			parameter[count++] = 0;
-			return;
-		}
-		parameter[count++] = c;
-	}
-}
+void copyBuff(BYTE from[],BYTE to[]);
+void xor(BYTE *buffer,BYTE *last);
+void increase(BYTE counter[]);
 
-void root_init(DIR *root){
-	root->upper = NULL;
-	root->next = NULL;
-	root->data_p = 0;
-	root->dir_p = 0;
-	root->data = NULL;
-	root->deep = NULL;
-}
+void enECBBLOCK(BYTE buffer[]);
+void deECBBLOCK(BYTE buffer[]);
 
-void mkdir(DIR *current,char parameter[30]){
-	DIR * new = malloc(sizeof(DIR));
-	DIR * c_dir = current;
-	root_init(new);
-	new->upper = current;
-	strcpy(new->name,parameter);
-	if(current->deep == NULL){
-		current->deep = new;
-		current->dir_p++;
-		return;
-	}
-	c_dir = current->deep;
-	while(1){
-		if(strcmp(c_dir->name,parameter)==0){
-			printf("mkdir: cannot create directory ‘%s’: File exists\n",parameter);
-			free(new);
-			return;
-		}
-		if(c_dir->next == NULL){
-			c_dir->next = new;
-			current->dir_p++;
-			return;
-		}
-		c_dir = c_dir->next;
-	}
-	
-}
+void enECB(char in[],char out[]);
+void deECB(char in[],char out[]);
+void enCBC(char in[],char out[]);
+void deCBC(char in[],char out[]);
+void enCFB(char in[],char out[]);
+void deCFB(char in[],char out[]);
+void CTR(char in[],char out[]);
+void enOFB(char in[],char out[]);
+void deOFB(char in[],char out[]);
 
-void ls(DIR *current){
-	DIR *c_dir = current->deep;
-	printf("directory: ");
-	while(c_dir != NULL){
-		printf("%s ",c_dir->name);
-		c_dir = c_dir->next;
-	}
-	DATA *c_data = current->data;
-	printf("\ndata: ");
-	while(c_data !=NULL ){
-		printf("%s ",c_data->name);
-		c_data = c_data->next;
-	}
-	printf("\n");
-}
+BYTE AES_Sbox[] = { 99,124,119,123,242,107,111,197,48,1,103,43,254,215,171,
+  118,202,130,201,125,250,89,71,240,173,212,162,175,156,164,114,192,183,253,
+  147,38,54,63,247,204,52,165,229,241,113,216,49,21,4,199,35,195,24,150,5,154,
+  7,18,128,226,235,39,178,117,9,131,44,26,27,110,90,160,82,59,214,179,41,227,
+  47,132,83,209,0,237,32,252,177,91,106,203,190,57,74,76,88,207,208,239,170,
+  251,67,77,51,133,69,249,2,127,80,60,159,168,81,163,64,143,146,157,56,245,
+  188,182,218,33,16,255,243,210,205,12,19,236,95,151,68,23,196,167,126,61,
+  100,93,25,115,96,129,79,220,34,42,144,136,70,238,184,20,222,94,11,219,224,
+  50,58,10,73,6,36,92,194,211,172,98,145,149,228,121,231,200,55,109,141,213,
+  78,169,108,86,244,234,101,122,174,8,186,120,37,46,28,166,180,198,232,221,
+  116,31,75,189,139,138,112,62,181,102,72,3,246,14,97,53,87,185,134,193,29,
+  158,225,248,152,17,105,217,142,148,155,30,135,233,206,85,40,223,140,161,
+  137,13,191,230,66,104,65,153,45,15,176,84,187,22 };
+BYTE AES_SboxInv[256];
 
-void pwd(DIR *current){
-	if(current->upper != NULL){
-		pwd(current->upper);
-		printf("/%s",current->name);
-	}
-}
+BYTE AES_ShiftRowTab[] = {0,5,10,15,4,9,14,3,8,13,2,7,12,1,6,11};
+BYTE h[16] = {0};
+BYTE test[] = {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15};
+BYTE AES_xtime[256];
+BYTE keyLen = 4;
+char inputFile[100] = {0};
+char outputFile[100] = {0};
+BYTE key[32] = {0};
+char mode[5] = "ECB";
+char en = 1;
+char n = 1;
+char turn = 0;
 
 
-DIR *cd(DIR *current,char parameter[30]){
-	if(strcmp(parameter,"..") == 0 && current->upper != NULL){
-		return current->upper;
-	}
-	DIR *c_dir = current->deep;
-	while(c_dir != NULL){
-		if(strcmp(c_dir->name,parameter) == 0){
-			return c_dir;
-		}
-		c_dir = c_dir->next;
-	}
-	printf("cd: %s: No such file or directory\n",parameter);
-	return current;
-}
-
-void rm(DIR *current,char parameter[30]){
-	DIR *dir_temp = current->deep;
-	DIR *delete_dir;
-	if(current->deep==NULL) return;
-	if(strcmp(dir_temp->name,parameter) == 0){
-		current->dir_p--;
-		current->deep = dir_temp->next;
-		free(dir_temp);
-		return ;
-	}
-	while(dir_temp->next != NULL){
-		if(strcmp(dir_temp->next->name,parameter)==0){
-			current->dir_p--;
-			delete_dir = dir_temp->next;
-			dir_temp->next = dir_temp->next->next;
-			free(delete_dir);
-			return;
-		}
-		dir_temp = dir_temp->next;
-	}
-}
-
-void payload(DIR *current){
-	printf("data_p: %d dir_p: %d\n",current->data_p,current->dir_p);
-}
-
-void init(FILE *fp){
-	fp = fopen("file.bin","wb+");
-	char block[BLOCK_SZIE] = {0};
-	for (int i=0;i<BLOCK;i++){
-		fwrite(block,sizeof(char),sizeof(block),fp);
-	}
-	fclose(fp);
-}
-
-int data_size(char parameter[30]){
-	FILE *fp;
-	fp = fopen(parameter,"rb+");
-	fseek(fp,0,SEEK_END);
-	return ftell(fp);
-}
-
-void input_data(DIR *current,int mark[BLOCK],char parameter[30]){
-	FILE *input;
-	input = fopen(parameter,"rb+");
-	if(input == NULL){
-		printf("cannot input '%s' : No such file\n",parameter);
-		return ;
-	}
-	printf("%d\n",data_size(parameter));
-	fclose(input);
+int main(int argc , char *argv[]){
+    init(argc,argv);
+    if(strcmp(mode,"ECB") == 0){
+        if(en){
+            enECB(inputFile,outputFile);
+        }else{
+            deECB(inputFile,outputFile);
+        }
+    }else if(strcmp(mode,"CBC") == 0){
+        if(en){
+            enCBC(inputFile,outputFile);
+        }else{
+            deCBC(inputFile,outputFile);
+        }
+    }else if(strcmp(mode,"CTR") == 0){
+        if(en){
+            CTR(inputFile,outputFile);
+        }else{
+            CTR(inputFile,outputFile);
+        }
+    }else if(strcmp(mode,"CFB") == 0){
+        if(en){
+            enCFB(inputFile,outputFile);
+        }else{
+            deCFB(inputFile,outputFile);
+        }
+    }else if(strcmp(mode,"OFB") == 0){
+        if(en){
+            enOFB(inputFile,outputFile);
+        }else{
+            deOFB(inputFile,outputFile);
+        }
+    }
+    char crypt[10];
+    if(en){
+        strcpy(crypt,"encrypted");
+    }else{
+        strcpy(crypt,"decrypted");
+    }
+    printf("%s %s output to %s by %s mode",crypt,inputFile,outputFile,mode);
+    
+    return 0;
 }
 
 
 
-
-void pr_mark(int mark[BLOCK]){
-	for(int i=0;i<BLOCK;i++){
-		if(mark[i] != 0){
-			printf("%d ",mark[i]);
-		}
-	}
-	printf("\n");
+void init(int argc , char *argv[]){
+    strcpy(outputFile,"output");
+    readArg(argc,argv);
+    for(int i = 0 ;i<256;i++){
+        AES_SboxInv[AES_Sbox[i]] = i;
+    }
+    for(int i = 0; i < 128; i++) {
+        AES_xtime[i] = i << 1;
+        AES_xtime[128 + i] = (i << 1) ^ 0x1b;
+    }
 }
 
-int straight(DIR *root){
-	int count=0;
-	DIR *c_dir = root;
-	DIR *d_dir;
-	DIR *tail = root;
-	while(c_dir != NULL){
-		d_dir = c_dir->deep;
-		printf("%s dir:%d data:%d\n",c_dir->name,c_dir->dir_p,c_dir->data_p);
-		tail->next = d_dir;
-		while(tail->next !=NULL){
-			tail = tail->next;
-		}
-		c_dir = c_dir->next;
-		count++;
-	}
-	printf("%d\n",count);
-	return count;
+void SubBytes(BYTE buffer[]){
+    for(int i=0;i<BLOCK;i++){
+        buffer[i] = AES_Sbox[buffer[i]];
+    }
+}
+void SubBytesInv(BYTE buffer[]){
+    for(int i=0;i<BLOCK;i++){
+        buffer[i] = AES_SboxInv[buffer[i]];
+    }
 }
 
-void init_node(DIR *c_dir,char name[20],int dir_p,int data_p){
-	strcpy(c_dir->name,name);
-	c_dir->dir_p = dir_p;
-	c_dir->data_p = data_p;
-	c_dir->next = NULL;
-	c_dir->deep = NULL;
-	c_dir->upper = NULL;
-	c_dir->data = NULL;
+void readArg(int argc, char *argv[]){
+    for(int i = 1; i < argc; i++) {
+        char *arg = argv[i];
+        if(arg[0] == '-'){
+            switch(arg[1]){
+                case 'k':
+                    strcpy(key,argv[++i]);
+                    break;
+                case 'f':
+                    strcpy(inputFile,argv[++i]);
+                    break;
+                case 'm':
+                    strcpy(mode,argv[++i]);
+                    break;
+                case 'o':
+                    strcpy(outputFile,argv[++i]);
+                    break;
+                case 'd':
+                    en = 0;
+                    break;
+                case 'e':
+                    en = 1;
+                    break;
+                case 'l':
+                    keyLen = atoi(argv[++i]);
+                    if(keyLen != 4 && keyLen != 6 && keyLen != 8){
+                        keyLen = 4;
+                    }
+                    break;
+                case 'n':
+                    n = atoi(argv[++i]);
+                    if(n>16) n = 16;
+                    break;
+            }
+        }
+    }
 }
 
-void straight_write(DIR *root,int mark[BLOCK],int *total){
-	FILE *fp;
-	fp = fopen("dir.bin","wb+");
-	fwrite(mark,sizeof(int),BLOCK,fp);
-	fwrite(total,sizeof(int),1,fp);
-	DIR *c_dir = root;
-	while(c_dir != NULL){
-		fwrite(c_dir->name,sizeof(char),20,fp);
-		fwrite(&c_dir->dir_p,sizeof(int),1,fp);
-		fwrite(&c_dir->data_p,sizeof(int),1,fp);
-		c_dir = c_dir->next;
-	}
-	c_dir = root;
-	DATA *data;
-	while(c_dir !=NULL){
-		data = c_dir->data;
-		while(data!=NULL){
-			fwrite(data->name,sizeof(char),20,fp);
-			fwrite(&data->location,sizeof(int),1,fp);
-			data = data->next;
-		}
-		c_dir=c_dir->next;
-	}
-	fclose(fp);
+void copyBuff(BYTE from[],BYTE to[]){
+    for(int i=0;i<BLOCK;i++){
+        to[i] = from[i];
+    }
 }
 
-void straight_read(DIR *root,int mark[BLOCK],FILE *dp){
-	DIR *c_dir = root;
-	int dir_p[10000];
-	int data_p;
-	char name[20];
-	int total;
-	FILE *fp;
-	fp = fopen("dir.bin","rb+");
-	fread(mark,sizeof(int),BLOCK,fp);
-	fread(&total,sizeof(int),1,fp);
-	fread(name,sizeof(char),20,fp);
-	fread(&dir_p[0],sizeof(int),1,fp);
-	fread(&data_p,sizeof(int),1,fp);
-	init_node(c_dir,name,dir_p[0],data_p);
-	for (int i=1;i<total;i++){
-		fread(name,sizeof(char),20,fp);
-		fread(&dir_p[i],sizeof(int),1,fp);
-		fread(&data_p,sizeof(int),1,fp);
-		c_dir->next = malloc(sizeof(DIR));
-		init_node(c_dir->next,name,dir_p[i],data_p);
-		c_dir = c_dir->next;
-	}
-	c_dir = root;
-	char data_name[20];
-	int data_location;
-	DATA *c_data;
+BYTE shiftTable[BLOCK] = {0,5,10,15,4,9,14,3,8,13,2,7,12,1,6,11};
 
-	c_dir = root;
-	DIR *a_dir =root->next;
-	while(c_dir !=NULL){
-		if(c_dir->dir_p != 0){
-			c_dir->deep = a_dir;
-			for(int j=0;j<c_dir->dir_p;j++){
-				a_dir->upper = c_dir;
-				a_dir = a_dir->next;
-			}
-		}
-		if(c_dir->data_p != 0){
-			c_data = malloc(sizeof(DATA));
-			c_dir->data = c_data;
-			fread(c_data->name,sizeof(char),20,fp);
-			fread(&c_data->location,sizeof(int),1,fp);
-			c_data->next=NULL;
-			for(int i=1;i<c_dir->data_p;i++){
-				c_data->next = malloc(sizeof(DATA));
-				c_data = c_data->next;
-				fread(c_data->name,sizeof(char),20,fp);
-				fread(&c_data->location,sizeof(int),1,fp);
-				c_data->next=NULL;
-			}
-		}
-		c_dir = c_dir->next;
-	}
-	c_dir = root->next;
-	for(int i=0;i<total;i++){
-		if(dir_p[i] !=0 ){
-			for(int j=0;j<dir_p[i]-1;j++){
-				c_dir = c_dir->next;
-			}
-			a_dir = c_dir->next;
-			c_dir->next = NULL;
-			c_dir = a_dir;
-		}
-	}
-	root->next = NULL;
-	fclose(fp);
+void ShiftRows(BYTE buffer[]){
+    BYTE temp[BLOCK];
+    for(int i=0;i<BLOCK;i++){
+        temp[i] = buffer[shiftTable[i]];
+    }
+    copyBuff(temp,buffer);
 }
 
-void remove_mark(int mark[BLOCK],int location){
-	int next;
-	int last = location;
-	while(1){
-		next = mark[last];
-		if(next < 0){
-			mark[last] = 0;
-			return;
-		}
-		mark[last] = 0;
-		last = next;
-	}
+BYTE reshiftTable[BLOCK] = {0,13,10,7,4,1,14,11,8,5,2,15,12,9,6,3};
+
+void ShiftRowsInv(BYTE buffer[]){
+    BYTE temp[BLOCK];
+    for(int i=0;i<BLOCK;i++){
+        temp[i] = buffer[reshiftTable[i]];
+    }
+    copyBuff(temp,buffer);
 }
 
-void delete(DIR *current,int mark[BLOCK],char parameter[20]){
-	DATA *data_temp = current->data;
-	DATA *delete_data;
-	if(current->data == NULL) {
-		return;
-	}
-	if(strcmp(data_temp->name,parameter) == 0){
-		remove_mark(mark,data_temp->location);
-		current->data_p--;
-		current->data = data_temp->next;
-		free(data_temp);
-		return;
-	}
-	while(data_temp->next!=NULL){
-		if(strcmp(data_temp->next->name,parameter) == 0){
-			remove_mark(mark,data_temp->next->location);
-			current->data_p--;
-			delete_data = data_temp->next;
-			data_temp->next = data_temp->next->next;
-			free(delete_data);
-			return;
-		}
-		data_temp = data_temp->next;
-	}
+void MixColumns(BYTE state[]) {
+  for(int i = 0; i < 16; i += 4) {
+    BYTE s0 = state[i + 0], s1 = state[i + 1];
+    BYTE s2 = state[i + 2], s3 = state[i + 3];
+    BYTE h = s0 ^ s1 ^ s2 ^ s3;
+    state[i + 0] ^= h ^ AES_xtime[s0 ^ s1];
+    state[i + 1] ^= h ^ AES_xtime[s1 ^ s2];
+    state[i + 2] ^= h ^ AES_xtime[s2 ^ s3];
+    state[i + 3] ^= h ^ AES_xtime[s3 ^ s0];
+  }
 }
 
-void import_size(int *data_body,int *data_tail,char parameter[30]){
-	FILE *fp;
-	fp = fopen(parameter,"rb+");
-	fseek(fp,0L,SEEK_END);
-	int total = ftell(fp);
-	*data_body = total/BLOCK_SZIE;
-	*data_tail = total%BLOCK_SZIE;
-	fclose(fp);
+void MixColumnsInv(BYTE state[]) {
+    for(int i = 0; i < 16; i += 4) {
+        BYTE s0 = state[i + 0], s1 = state[i + 1];
+        BYTE s2 = state[i + 2], s3 = state[i + 3];
+        BYTE h = s0 ^ s1 ^ s2 ^ s3;
+        BYTE xh = AES_xtime[h];
+        BYTE h1 = AES_xtime[AES_xtime[xh ^ s0 ^ s2]] ^ h;
+        BYTE h2 = AES_xtime[AES_xtime[xh ^ s1 ^ s3]] ^ h;
+        state[i + 0] ^= h1 ^ AES_xtime[s0 ^ s1];
+        state[i + 1] ^= h2 ^ AES_xtime[s1 ^ s2];
+        state[i + 2] ^= h1 ^ AES_xtime[s2 ^ s3];
+        state[i + 3] ^= h2 ^ AES_xtime[s3 ^ s0];
+    }
 }
 
-int find_empty(int mark[BLOCK]){
-	for (int i=0;i<BLOCK;i++){
-		if(mark[i] == 0){
-			return i;
-		}
-	}
-	printf("full\n");
-	return -1;
+void AddRoundKey(BYTE buffer[]){
+    for(int i=turn;i<turn+BLOCK;i++){
+        buffer[i] = buffer[i] ^ key[i];
+    }
+    if(keyLen == 24){
+        turn = (turn + 8) % 16;
+    }else if(keyLen == 32){
+        turn = (turn + 16) % 32;
+    }
 }
 
-void out_load(int mark[BLOCK],int location,char parameter[20]){
-	FILE *fp;
-	int c_loc = location;
-	char buffer[BLOCK];
-	fp = fopen(parameter,"wb+");
-	FILE *file;
-	file = fopen("file.bin","rb+");
-	while(1){
-		if(mark[c_loc] < 0){
-			fseek(file,sizeof(char)*BLOCK_SZIE*c_loc,SEEK_SET);
-			fread(buffer,sizeof(char),mark[c_loc]*-1,file);
-			fwrite(buffer,sizeof(char),mark[c_loc]*-1,fp);
-			fclose(file);
-			fclose(fp);
-			return;
-		}
-		fseek(file,sizeof(char)*BLOCK_SZIE*c_loc,SEEK_SET);
-		fread(buffer,sizeof(char),BLOCK_SZIE,file);
-		fwrite(buffer,sizeof(char),BLOCK_SZIE,fp);
-		c_loc = mark[c_loc];
-	}
+void xor(BYTE *buffer,BYTE *last){
+    for(int i=0;i<BLOCK;i++){
+        buffer[i] = buffer[i] ^ last[i];
+    }
 }
 
-void output(DIR *current,int mark[BLOCK],char parameter[20]){
-	int data_tail=0;
-	DATA *c_data = current->data;
-	while(c_data != NULL){
-		if(strcmp(c_data->name,parameter)==0){
-			out_load(mark,c_data->location,parameter);
-			return;
-		}
-		c_data = c_data->next;
-	}
+
+void ExpandKey(BYTE *bKey,BYTE i) {
+    BYTE Rcon[] = {1,2,4,8,16,32,64,128,27,54};
+    BYTE temp[BLOCK];
+    copyBuff(bKey,temp);
+    for(int i=0;i<4;i++){
+        temp[12 + i] = bKey[12 + i + 1];
+        temp[12 + i] = AES_Sbox[temp[12 + i]];
+    }
+    bKey[0] = bKey[0] ^ temp[12] ^ Rcon[i];
+    bKey[1] = bKey[1] ^ temp[13] ;
+    bKey[2] = bKey[2] ^ temp[14] ;
+    bKey[3] = bKey[3] ^ temp[15] ;
+    for(int i=0;i<4;i++){
+        bKey[4 + i] = bKey[i];
+        bKey[8 + i] = bKey[i + 4];
+        bKey[12 + i] = bKey[i + 8];
+    }
 }
 
-void import(DIR *current,int mark[BLOCK],char parameter[20]){
-	int data_body;
-	int data_tail;
-	import_size(&data_body,&data_tail,parameter);
-	char buffer[BLOCK_SZIE];
-	FILE *in;
-	FILE *out;
-	in = fopen(parameter,"rb+");
-	if(in == NULL){
-		printf("No %s such data\n",parameter);
-		return;
-	}
-	out = fopen("file.bin","rb+");
-	DATA *new_data = malloc(sizeof(DATA));
-	new_data->next=NULL;
-	int last = find_empty(mark);
-	mark[last] = last;
-	int next;
-	new_data->location = last;
-	
-	strcpy(new_data->name,parameter);
-	current->data_p++;
-	DATA *c_data;
-	if(current->data == NULL){
-		current->data = new_data;
-	}else{
-		c_data = current->data;
-		while(c_data->next!=NULL){
-			c_data=c_data->next;
-		}
-		c_data->next = new_data;
-	}
-	for(int i=0;i<data_body;i++){
-		mark[last] = (BLOCK+1) * -1;
-		next = find_empty(mark);
-		mark[last] = next;
-		fread(buffer,sizeof(char),BLOCK_SZIE,in);
-		fseek(out,sizeof(char)*last*BLOCK_SZIE,SEEK_SET);
-		fwrite(buffer,sizeof(char),BLOCK_SZIE,out);
-		last = next;
-	}
-	mark[last] = data_tail * -1;
-	fread(buffer,sizeof(char),data_tail,in);
-	fseek(out,sizeof(char)*last*BLOCK_SZIE,SEEK_SET);
-	fwrite(buffer,sizeof(char),data_tail,out);
-	fclose(in);
-	fclose(out);
+void enECBBLOCK(BYTE buffer[]){
+    BYTE bKey[BLOCK];
+    copyBuff(key,bKey);
+    AddRoundKey(buffer);
+    ExpandKey(bKey,0);
+    for(int i=1;i<10;i++){
+        SubBytes(buffer);
+        ShiftRows(buffer);
+        MixColumns(buffer);
+        AddRoundKey(buffer);
+        ExpandKey(bKey,i);
+    }
+    SubBytes(buffer);
+    ShiftRows(buffer);
+    AddRoundKey(buffer);
 }
 
-void main(void){
-	int total = 0;
-	int mark[BLOCK] = {0};
-	char input[50];
-	char command[20];
-	char parameter[30];
-	DIR *root = malloc(sizeof(DIR));
-	strcpy(root->name,"root");
-	root_init(root);
-	DIR *current = root;
-	FILE *fp;
-	FILE *file;
-	FILE *dp;
-	dp = fopen("dir.bin","rb+");
-	if (dp == NULL){
-		dp = fopen("dir.bin","wb+");
-		fclose(dp);
-	}else{
-		straight_read(root,mark,dp);
-	}
-	fp = fopen("file.bin","rb+");
-	if (fp==NULL){
-		printf("initialization\n");
-		init(fp);
-	}
-	while(1){
-		pwd(current);
-		printf(" # ");
-		gets(input);
-		analysis(input,command,parameter);
-		if(strcmp(command,"exit") == 0){
-			break;
-		}else
-		if(strcmp(command,"mkdir") == 0){
-			mkdir(current,parameter);
-		}else
-		if(strcmp(command,"ls") == 0){
-			ls(current);
-		}else
-		if(strcmp(command,"cd") == 0){
-			current = cd(current,parameter);
-		}else
-		if(strcmp(command,"payload") == 0){
-			payload(current);
-		}else
-		if(strcmp(command,"rm") == 0){
-			rm(current,parameter);
-		}else
-		if(strcmp(command,"import") == 0 ){
-			import(current,mark,parameter);
-		}else
-		if(strcmp(command,"mark") == 0){
-			pr_mark(mark);
-		}else
-		if(strcmp(command,"delete") == 0){
-			delete(current,mark,parameter);
-		}else
-		if(strcmp(command,"output") == 0){
-			output(current,mark,parameter);
-		}else
-		{
-			printf("%s: command not found\n",command);
-		}
-	}
-	total = straight(root);
-	straight_write(root,mark,&total);
+void deECBBLOCK(BYTE buffer[]){
+    AddRoundKey(buffer);
+    ShiftRowsInv(buffer);
+    SubBytesInv(buffer);
+    for(int i=0;i<9;i++){
+        AddRoundKey(buffer);
+        MixColumnsInv(buffer);
+        ShiftRowsInv(buffer);
+        SubBytesInv(buffer);
+    }
+    AddRoundKey(buffer);
+}
+
+void enECB(char in[],char out[]){
+    FILE * filer, * filew;
+	BYTE buffer[BLOCK];
+    filer=fopen(in,"rb");
+	filew=fopen(out,"wb");
+    fseek(filer,0,SEEK_END);
+	int size = ftell(filer);
+    int body = size / BLOCK;
+    int tail = size % BLOCK;
+    fwrite(&tail,1,1,filew);
+    rewind(filer);
+	for(int i=0;i<body;i++){
+        fread(buffer,1,BLOCK,filer);
+        enECBBLOCK(buffer);
+        fwrite(buffer,1,BLOCK,filew);
+    }
+    if(tail > 0){
+        fread(buffer,1,BLOCK,filer);
+        enECBBLOCK(buffer);
+        fwrite(buffer,1,BLOCK,filew);
+    }
+	fclose(filer);
+	fclose(filew);
+}
+
+void deECB(char in[],char out[]){
+    FILE * filer, * filew;
+	BYTE buffer[BLOCK];
+    filer=fopen(in,"rb");
+    filew=fopen(out,"wb");
+    fseek(filer,0,SEEK_END);
+	int size = ftell(filer);
+    int body = size / BLOCK - 1;
+    int tail;
+    rewind(filer);
+    fread(&tail,1,1,filer);
+    for(int i=0;i<body;i++){
+        fread(buffer,1,BLOCK,filer);
+        deECBBLOCK(buffer);
+        fwrite(buffer,1,BLOCK,filew);
+    }
+    if(tail > 0){
+        fread(buffer,1,BLOCK,filer);
+        deECBBLOCK(buffer);
+        fwrite(buffer,1,tail,filew);
+    }
+	fclose(filer);
+	fclose(filew);
+}
+
+void enCBC(char in[],char out[]){
+    FILE * filer, * filew;
+	int numr;
+	BYTE buffer[BLOCK];
+    BYTE last[BLOCK] = {2,3,1,1,1,2,3,1,1,1,2,3,3,1,1,2};
+    filer=fopen(in,"rb");
+    filew=fopen(out,"wb");
+    while(feof(filer)==0){
+        if((numr=fread(buffer,1,BLOCK,filer)) == BLOCK){
+            xor(buffer,last);
+            enECBBLOCK(buffer);
+            copyBuff(buffer,last);
+        }
+        fwrite(buffer,1,numr,filew);
+    }
+	fclose(filer);
+	fclose(filew);
+}
+
+void deCBC(char in[],char out[]){
+    FILE * filer, * filew;
+	int numr,numw;
+	BYTE buffer[BLOCK];
+    BYTE last[BLOCK]={2,3,1,1,1,2,3,1,1,1,2,3,3,1,1,2};
+    BYTE next[BLOCK]={2,3,1,1,1,2,3,1,1,1,2,3,3,1,1,2};
+    filer=fopen(in,"rb");
+    filew=fopen(out,"wb");
+    while(feof(filer)==0){
+        if((numr=fread(buffer,1,BLOCK,filer)) == BLOCK){
+            copyBuff(buffer,next);
+            deECBBLOCK(buffer);
+            xor(buffer,last);
+            copyBuff(next,last);
+        }
+        fwrite(buffer,1,numr,filew);
+    }
+	fclose(filer);
+	fclose(filew);
+}
+
+void increase(BYTE counter[]){
+    BYTE carry = 1;
+    for(int i=0;i<16;i++){
+        if(carry == 1 && counter[i] == 255){
+            carry = 1;
+            counter[i] = 0;
+        }else{
+            counter[i] += carry;
+            carry = 0;
+        }
+    }
+}
+
+void CTR(char in[],char out[]){
+    FILE * filer, * filew;
+	int numr,numw;
+	BYTE buffer[BLOCK];
+    BYTE counter[BLOCK] = {2,3,1,1,1,2,3,1,1,1,2,3,3,1,1,2};
+    BYTE last[BLOCK];
+    filer=fopen(in,"rb");
+	filew=fopen(out,"wb");
+	while(feof(filer)==0){
+        if((numr=fread(buffer,1,BLOCK,filer)) == BLOCK){
+            copyBuff(counter,last);
+            enECBBLOCK(last);
+            xor(buffer,last);
+            increase(counter);
+        }
+        numw=fwrite(buffer,1,numr,filew);
+    }
+	fclose(filer);
+	fclose(filew);
+}
+
+void push(BYTE *buffer,BYTE *iv){
+    BYTE temp[BLOCK];
+    copyBuff(buffer, temp);
+    for(int j=0;j<n;j++){
+        for(int i=0;i<15;i++){
+            iv[i] = iv[i+1];
+        }
+        iv[15] = buffer[0];
+        for(int i=0;i<15;i++){
+            temp[i] = temp[i+1];
+        }
+    }
+}
+
+void enCFB(char in[],char out[]){
+    FILE * filer, * filew;
+	int numr,numw;
+	BYTE buffer[BLOCK];
+    BYTE iv[BLOCK] = {2,3,1,1,1,2,3,1,1,1,2,3,3,1,1,2};
+    filer=fopen(in,"rb");
+    filew=fopen(out,"wb");
+	while(feof(filer)==0){
+        if((numr=fread(buffer,1,BLOCK,filer)) == BLOCK){
+            enECBBLOCK(iv);
+            xor(buffer, iv);
+            push(buffer, iv);
+        }
+        fwrite(buffer,1,numr,filew);
+    }
+	fclose(filer);
+	fclose(filew);
+}
+
+void deCFB(char in[],char out[]){
+    FILE * filer, * filew;
+	int numr,numw;
+	BYTE buffer[BLOCK];
+    BYTE last[BLOCK] = {2,3,1,1,1,2,3,1,1,1,2,3,3,1,1,2};
+    BYTE iv[BLOCK] = {2,3,1,1,1,2,3,1,1,1,2,3,3,1,1,2};
+    filer=fopen(in,"rb");
+    filew=fopen(out,"wb");
+	while(feof(filer)==0){
+        if((numr=fread(buffer,1,BLOCK,filer)) == BLOCK){
+            enECBBLOCK(iv);
+            copyBuff(buffer,last);
+            xor(buffer, iv);
+            push(last,iv);
+        }
+        fwrite(buffer,1,numr,filew);
+    }
+	fclose(filer);
+	fclose(filew);
+}
+
+void enOFB(char in[],char out[]){
+    FILE * filer, * filew;
+	int numr,numw;
+	BYTE buffer[BLOCK];
+    BYTE iv[BLOCK] = {2,3,1,1,1,2,3,1,1,1,2,3,3,1,1,2};
+    filer=fopen(in,"rb");
+    filew=fopen(out,"wb");
+	while(feof(filer)==0){
+        if((numr=fread(buffer,1,BLOCK,filer)) == BLOCK){
+            enECBBLOCK(iv);
+            xor(buffer, iv);
+            push(iv, iv);
+        }
+        numw=fwrite(buffer,1,numr,filew);
+    }
+	fclose(filer);
+	fclose(filew);
+}
+void deOFB(char in[],char out[]){
+    FILE * filer, * filew;
+	int numr,numw;
+	BYTE buffer[BLOCK];
+    BYTE iv[BLOCK] = {2,3,1,1,1,2,3,1,1,1,2,3,3,1,1,2};
+    filer=fopen(in,"rb");
+    filew=fopen(out,"wb");
+	while(feof(filer)==0){
+        if((numr=fread(buffer,1,BLOCK,filer)) == BLOCK){
+            enECBBLOCK(iv);
+            xor(buffer, iv);
+            push(iv, iv);
+        }
+        numw=fwrite(buffer,1,numr,filew);
+    }
+	fclose(filer);
+	fclose(filew);
 }
