@@ -5,24 +5,24 @@
 #define BYTE unsigned char
 #define BLOCK 16
 
-int AES_ExpandKey();
 void init(int argc , char *argv[]);
 void readArg(int argc, char *argv[]);
 
+void ExpandKey(BYTE *bKey,BYTE i);
 void SubBytes(BYTE buffer[]);
 void SubBytesInv(BYTE buffer[]);
 void ShiftRows(BYTE buffer[]);
 void ShiftRowsInv(BYTE buffer[]);
 void MixColumns(BYTE state[]);
 void MixColumnsInv(BYTE state[]);
-void AddRoundKey(BYTE buffer[]);
+void AddRoundKey(BYTE buffer[],BYTE key[]);
 
 void copyBuff(BYTE from[],BYTE to[]);
 void xor(BYTE *buffer,BYTE *last);
 void increase(BYTE counter[]);
 
-void enECBBLOCK(BYTE buffer[]);
-void deECBBLOCK(BYTE buffer[]);
+void enBLOCK(BYTE buffer[]);
+void deBLOCK(BYTE buffer[]);
 
 void enECB(char in[],char out[]);
 void deECB(char in[],char out[]);
@@ -31,7 +31,8 @@ void deCBC(char in[],char out[]);
 void enCFB(char in[],char out[]);
 void deCFB(char in[],char out[]);
 void CTR(char in[],char out[]);
-void OFB(char in[],char out[]);
+void enOFB(char in[],char out[]);
+void deOFB(char in[],char out[]);
 
 BYTE AES_Sbox[] = { 99,124,119,123,242,107,111,197,48,1,103,43,254,215,171,
   118,202,130,201,125,250,89,71,240,173,212,162,175,156,164,114,192,183,253,
@@ -50,15 +51,17 @@ BYTE AES_SboxInv[256];
 
 BYTE AES_ShiftRowTab[] = {0,5,10,15,4,9,14,3,8,13,2,7,12,1,6,11};
 BYTE h[16] = {0};
-BYTE test[] = {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15};
 BYTE AES_xtime[256];
 BYTE keyLen = 4;
 char inputFile[100] = {0};
 char outputFile[100] = {0};
-BYTE key[32] = {0};
+BYTE key1[32] = {0};
+BYTE key2[32] = {0};
+BYTE key3[32] = {0};
 char mode[5] = "ECB";
 char en = 1;
-
+char n = 1;
+char turn = 0;
 
 int main(int argc , char *argv[]){
     init(argc,argv);
@@ -75,7 +78,11 @@ int main(int argc , char *argv[]){
             deCBC(inputFile,outputFile);
         }
     }else if(strcmp(mode,"CTR") == 0){
-        CTR(inputFile,outputFile);
+        if(en){
+            CTR(inputFile,outputFile);
+        }else{
+            CTR(inputFile,outputFile);
+        }
     }else if(strcmp(mode,"CFB") == 0){
         if(en){
             enCFB(inputFile,outputFile);
@@ -83,56 +90,33 @@ int main(int argc , char *argv[]){
             deCFB(inputFile,outputFile);
         }
     }else if(strcmp(mode,"OFB") == 0){
-        OFB(inputFile,outputFile);
+        if(en){
+            enOFB(inputFile,outputFile);
+        }else{
+            deOFB(inputFile,outputFile);
+        }
     }
+    char crypt[10];
+    if(en){
+        strcpy(crypt,"encrypted");
+    }else{
+        strcpy(crypt,"decrypted");
+    }
+    printf("%s %s output to %s by %s mode",crypt,inputFile,outputFile,mode);
+    
     return 0;
 }
 
-int AES_ExpandKey() {
-    keyLen *= 4;
-  int kl = keyLen, ks, Rcon = 1, i, j;
-  BYTE temp[4], temp2[4];
-  switch (kl) {
-    case 16: ks = 16 * (10 + 1); break;
-    case 24: ks = 16 * (12 + 1); break;
-    case 32: ks = 16 * (14 + 1); break;
-    default: 
-      printf("AES_ExpandKey: Only key lengths of 16, 24 or 32 bytes allowed!");
-  }
-  for(i = kl; i < ks; i += 4) {
-    memcpy(temp, &key[i-4], 4);
-    if (i % kl == 0) {
-      temp2[0] = AES_Sbox[temp[1]] ^ Rcon;
-      temp2[1] = AES_Sbox[temp[2]];
-      temp2[2] = AES_Sbox[temp[3]];
-      temp2[3] = AES_Sbox[temp[0]];
-      memcpy(temp, temp2, 4);
-      if ((Rcon <<= 1) >= 256)
-        Rcon ^= 0x11b;
-    }
-    else if ((kl > 24) && (i % kl == 16)) {
-      temp2[0] = AES_Sbox[temp[0]];
-      temp2[1] = AES_Sbox[temp[1]];
-      temp2[2] = AES_Sbox[temp[2]];
-      temp2[3] = AES_Sbox[temp[3]];
-      memcpy(temp, temp2, 4);
-    }
-    for(j = 0; j < 4; j++)
-      key[i + j] = key[i + j - kl] ^ temp[j];
-  }
-  return ks;
-}
-
 void init(int argc , char *argv[]){
+    strcpy(outputFile,"output");
     readArg(argc,argv);
-    AES_ExpandKey();
     for(int i = 0 ;i<256;i++){
-       AES_SboxInv[AES_Sbox[i]] = i;
+        AES_SboxInv[AES_Sbox[i]] = i;
     }
     for(int i = 0; i < 128; i++) {
-    AES_xtime[i] = i << 1;
-    AES_xtime[128 + i] = (i << 1) ^ 0x1b;
-  }
+        AES_xtime[i] = i << 1;
+        AES_xtime[128 + i] = (i << 1) ^ 0x1b;
+    }
 }
 
 void SubBytes(BYTE buffer[]){
@@ -148,11 +132,11 @@ void SubBytesInv(BYTE buffer[]){
 
 void readArg(int argc, char *argv[]){
     for(int i = 1; i < argc; i++) {
-        char *arg = argv[i]; 
+        char *arg = argv[i];
         if(arg[0] == '-'){
             switch(arg[1]){
                 case 'k':
-                    strcpy(key,argv[++i]);
+                    strcpy(key1,argv[++i]);
                     break;
                 case 'f':
                     strcpy(inputFile,argv[++i]);
@@ -174,6 +158,10 @@ void readArg(int argc, char *argv[]){
                     if(keyLen != 4 && keyLen != 6 && keyLen != 8){
                         keyLen = 4;
                     }
+                    break;
+                case 'n':
+                    n = atoi(argv[++i]);
+                    if(n>16) n = 16;
                     break;
             }
         }
@@ -233,9 +221,14 @@ void MixColumnsInv(BYTE state[]) {
     }
 }
 
-void AddRoundKey(BYTE buffer[]){
-    for(int i=0;i<BLOCK;i++){
+void AddRoundKey(BYTE buffer[],BYTE key[]){
+    for(int i=turn;i<turn+BLOCK;i++){
         buffer[i] = buffer[i] ^ key[i];
+    }
+    if(keyLen == 24){
+        turn = (turn + 8) % 16;
+    }else if(keyLen == 32){
+        turn = (turn + 16) % 32;
     }
 }
 
@@ -245,45 +238,75 @@ void xor(BYTE *buffer,BYTE *last){
     }
 }
 
-void enECBBLOCK(BYTE buffer[]){
-    AddRoundKey(buffer);
-    for(int i=0;i<9;i++){
+void ExpandKey(BYTE *bKey,BYTE i) {
+    BYTE Rcon[] = {1,2,4,8,16,32,64,128,27,54};
+    BYTE temp[BLOCK];
+    copyBuff(bKey,temp);
+    for(int i=0;i<4;i++){
+        temp[12 + i] = bKey[12 + i + 1];
+        temp[12 + i] = AES_Sbox[temp[12 + i]];
+    }
+    bKey[0] = bKey[0] ^ temp[12] ^ Rcon[i];
+    bKey[1] = bKey[1] ^ temp[13] ;
+    bKey[2] = bKey[2] ^ temp[14] ;
+    bKey[3] = bKey[3] ^ temp[15] ;
+    for(int i=0;i<4;i++){
+        bKey[4 + i] = bKey[i];
+        bKey[8 + i] = bKey[i + 4];
+        bKey[12 + i] = bKey[i + 8];
+    }
+}
+
+void enBLOCK(BYTE buffer[]){
+    BYTE bKey[BLOCK];
+    copyBuff(key1,bKey);
+    AddRoundKey(buffer,key1);
+    ExpandKey(bKey,0);
+    for(int i=1;i<10;i++){
         SubBytes(buffer);
         ShiftRows(buffer);
         MixColumns(buffer);
-        AddRoundKey(buffer);
+        AddRoundKey(buffer,key1);
+        ExpandKey(bKey,i);
     }
     SubBytes(buffer);
     ShiftRows(buffer);
-    AddRoundKey(buffer);
+    AddRoundKey(buffer,key1);
 }
 
-void deECBBLOCK(BYTE buffer[]){
-    AddRoundKey(buffer);
+void deBLOCK(BYTE buffer[]){
+    AddRoundKey(buffer,key1);
     ShiftRowsInv(buffer);
     SubBytesInv(buffer);
     for(int i=0;i<9;i++){
-        AddRoundKey(buffer);
+        AddRoundKey(buffer,key1);
         MixColumnsInv(buffer);
         ShiftRowsInv(buffer);
         SubBytesInv(buffer);
     }
-    AddRoundKey(buffer);
+    AddRoundKey(buffer,key1);
 }
 
 void enECB(char in[],char out[]){
     FILE * filer, * filew;
-	int numr,numw;
 	BYTE buffer[BLOCK];
-    BYTE last[BLOCK];
     filer=fopen(in,"rb");
 	filew=fopen(out,"wb");
-	while(feof(filer)==0){
-        if((numr=fread(buffer,1,BLOCK,filer)) == BLOCK){
-            enECBBLOCK(buffer);
-        }
-        
-        numw=fwrite(buffer,1,numr,filew);
+    fseek(filer,0,SEEK_END);
+	int size = ftell(filer);
+    int body = size / BLOCK;
+    int tail = size % BLOCK;
+    fwrite(&tail,1,1,filew);
+    rewind(filer);
+	for(int i=0;i<body;i++){
+        fread(buffer,1,BLOCK,filer);
+        enBLOCK(buffer);
+        fwrite(buffer,1,BLOCK,filew);
+    }
+    if(tail > 0){
+        fread(buffer,1,BLOCK,filer);
+        enBLOCK(buffer);
+        fwrite(buffer,1,BLOCK,filew);
     }
 	fclose(filer);
 	fclose(filew);
@@ -291,15 +314,24 @@ void enECB(char in[],char out[]){
 
 void deECB(char in[],char out[]){
     FILE * filer, * filew;
-	int numr,numw;
 	BYTE buffer[BLOCK];
     filer=fopen(in,"rb");
     filew=fopen(out,"wb");
-	while(feof(filer)==0){
-        if((numr=fread(buffer,1,BLOCK,filer)) == BLOCK){
-            deECBBLOCK(buffer);
-        }
-        numw=fwrite(buffer,1,numr,filew);
+    fseek(filer,0,SEEK_END);
+	int size = ftell(filer);
+    int body = size / BLOCK - 1;
+    int tail;
+    rewind(filer);
+    fread(&tail,1,1,filer);
+    for(int i=0;i<body;i++){
+        fread(buffer,1,BLOCK,filer);
+        deBLOCK(buffer);
+        fwrite(buffer,1,BLOCK,filew);
+    }
+    if(tail > 0){
+        fread(buffer,1,BLOCK,filer);
+        deBLOCK(buffer);
+        fwrite(buffer,1,tail,filew);
     }
 	fclose(filer);
 	fclose(filew);
@@ -307,26 +339,18 @@ void deECB(char in[],char out[]){
 
 void enCBC(char in[],char out[]){
     FILE * filer, * filew;
-	int numr,numw;
+	int numr;
 	BYTE buffer[BLOCK];
-    BYTE last[BLOCK];
+    BYTE last[BLOCK] = {2,3,1,1,1,2,3,1,1,1,2,3,3,1,1,2};
     filer=fopen(in,"rb");
     filew=fopen(out,"wb");
-    if(feof(filer) == 0){
-        if((numr=fread(buffer,1,BLOCK,filer)) == BLOCK){
-            MixColumns(buffer);
-            AddRoundKey(buffer);
-            copyBuff(buffer,last);
-        }
-        numw=fwrite(buffer,1,numr,filew);
-    }
-	while(feof(filer)==0){
+    while(feof(filer)==0){
         if((numr=fread(buffer,1,BLOCK,filer)) == BLOCK){
             xor(buffer,last);
-            AddRoundKey(buffer);
+            enBLOCK(buffer);
             copyBuff(buffer,last);
         }
-        numw=fwrite(buffer,1,numr,filew);
+        fwrite(buffer,1,numr,filew);
     }
 	fclose(filer);
 	fclose(filew);
@@ -336,26 +360,18 @@ void deCBC(char in[],char out[]){
     FILE * filer, * filew;
 	int numr,numw;
 	BYTE buffer[BLOCK];
-    BYTE last[BLOCK];
-    BYTE last2[BLOCK];
+    BYTE last[BLOCK]={2,3,1,1,1,2,3,1,1,1,2,3,3,1,1,2};
+    BYTE next[BLOCK]={2,3,1,1,1,2,3,1,1,1,2,3,3,1,1,2};
     filer=fopen(in,"rb");
     filew=fopen(out,"wb");
-    if(feof(filer) == 0){
+    while(feof(filer)==0){
         if((numr=fread(buffer,1,BLOCK,filer)) == BLOCK){
-            copyBuff(buffer,last);
-            AddRoundKey(buffer);
-            MixColumnsInv(buffer);
-        }
-        numw=fwrite(buffer,1,numr,filew);
-    }
-	while(feof(filer)==0){
-        if((numr=fread(buffer,1,BLOCK,filer)) == BLOCK){
-            copyBuff(buffer,last2);
-            AddRoundKey(buffer);
+            copyBuff(buffer,next);
+            deBLOCK(buffer);
             xor(buffer,last);
-            copyBuff(last2,last);
+            copyBuff(next,last);
         }
-        numw=fwrite(buffer,1,numr,filew);
+        fwrite(buffer,1,numr,filew);
     }
 	fclose(filer);
 	fclose(filew);
@@ -385,7 +401,7 @@ void CTR(char in[],char out[]){
 	while(feof(filer)==0){
         if((numr=fread(buffer,1,BLOCK,filer)) == BLOCK){
             copyBuff(counter,last);
-            enECBBLOCK(last);
+            enBLOCK(last);
             xor(buffer,last);
             increase(counter);
         }
@@ -395,62 +411,61 @@ void CTR(char in[],char out[]){
 	fclose(filew);
 }
 
+void push(BYTE *buffer,BYTE *iv){
+    BYTE temp[BLOCK];
+    copyBuff(buffer, temp);
+    for(int j=0;j<n;j++){
+        for(int i=0;i<15;i++){
+            iv[i] = iv[i+1];
+        }
+        iv[15] = buffer[0];
+        for(int i=0;i<15;i++){
+            temp[i] = temp[i+1];
+        }
+    }
+}
+
 void enCFB(char in[],char out[]){
     FILE * filer, * filew;
 	int numr,numw;
 	BYTE buffer[BLOCK];
-    BYTE last[BLOCK];
     BYTE iv[BLOCK] = {2,3,1,1,1,2,3,1,1,1,2,3,3,1,1,2};
     filer=fopen(in,"rb");
     filew=fopen(out,"wb");
-    if(feof(filer) == 0){
-        if((numr=fread(buffer,1,BLOCK,filer)) == BLOCK){
-            enECBBLOCK(iv);
-            xor(buffer, iv);
-            copyBuff(buffer, last);
-        }
-        numw=fwrite(buffer,1,numr,filew);
-    }
 	while(feof(filer)==0){
         if((numr=fread(buffer,1,BLOCK,filer)) == BLOCK){
-            enECBBLOCK(last);
-            xor(buffer, last);
-            copyBuff(buffer, last);
+            enBLOCK(iv);
+            xor(buffer, iv);
+            push(buffer, iv);
         }
-        numw=fwrite(buffer,1,numr,filew);
+        fwrite(buffer,1,numr,filew);
     }
 	fclose(filer);
 	fclose(filew);
 }
+
 void deCFB(char in[],char out[]){
     FILE * filer, * filew;
 	int numr,numw;
 	BYTE buffer[BLOCK];
-    BYTE last[BLOCK];
+    BYTE last[BLOCK] = {2,3,1,1,1,2,3,1,1,1,2,3,3,1,1,2};
     BYTE iv[BLOCK] = {2,3,1,1,1,2,3,1,1,1,2,3,3,1,1,2};
     filer=fopen(in,"rb");
     filew=fopen(out,"wb");
-    if(feof(filer) == 0){
-        if((numr=fread(buffer,1,BLOCK,filer)) == BLOCK){
-            copyBuff(buffer, last);
-            enECBBLOCK(iv);
-            xor(buffer, iv);
-        }
-        numw=fwrite(buffer,1,numr,filew);
-    }
 	while(feof(filer)==0){
         if((numr=fread(buffer,1,BLOCK,filer)) == BLOCK){
-            enECBBLOCK(last);
-            copyBuff(buffer, iv);
-            xor(buffer, last);
-            copyBuff(iv, last);
+            enBLOCK(iv);
+            copyBuff(buffer,last);
+            xor(buffer, iv);
+            push(last,iv);
         }
-        numw=fwrite(buffer,1,numr,filew);
+        fwrite(buffer,1,numr,filew);
     }
 	fclose(filer);
 	fclose(filew);
 }
-void OFB(char in[],char out[]){
+
+void enOFB(char in[],char out[]){
     FILE * filer, * filew;
 	int numr,numw;
 	BYTE buffer[BLOCK];
@@ -459,8 +474,28 @@ void OFB(char in[],char out[]){
     filew=fopen(out,"wb");
 	while(feof(filer)==0){
         if((numr=fread(buffer,1,BLOCK,filer)) == BLOCK){
-            enECBBLOCK(iv);
+            enBLOCK(iv);
             xor(buffer, iv);
+            push(iv, iv);
+        }
+        numw=fwrite(buffer,1,numr,filew);
+    }
+	fclose(filer);
+	fclose(filew);
+}
+
+void deOFB(char in[],char out[]){
+    FILE * filer, * filew;
+	int numr,numw;
+	BYTE buffer[BLOCK];
+    BYTE iv[BLOCK] = {2,3,1,1,1,2,3,1,1,1,2,3,3,1,1,2};
+    filer=fopen(in,"rb");
+    filew=fopen(out,"wb");
+	while(feof(filer)==0){
+        if((numr=fread(buffer,1,BLOCK,filer)) == BLOCK){
+            enBLOCK(iv);
+            xor(buffer, iv);
+            push(iv, iv);
         }
         numw=fwrite(buffer,1,numr,filew);
     }
