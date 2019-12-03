@@ -1,38 +1,42 @@
+// 來源為 http://point-at-infinity.org/jsaes/，授權為 GNU GPL 授權。
+// 本程式將來源程式擴充成5種加密模式
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-#define BYTE unsigned char
-#define BLOCK 16
+#define BYTE unsigned char //宣告BYTE為unsigned char的別名
+#define BLOCK 16 //BLOCK size
 
-void init(int argc , char *argv[]);
-void readArg(int argc, char *argv[]);
+void init(int argc , char *argv[]); //初始化
+void readArg(int argc, char *argv[]); //讀取參數
 
-void ExpandKey(BYTE *bKey,BYTE i);
-void SubBytes(BYTE buffer[]);
-void SubBytesInv(BYTE buffer[]);
-void ShiftRows(BYTE buffer[]);
-void ShiftRowsInv(BYTE buffer[]);
-void MixColumns(BYTE state[]);
-void MixColumnsInv(BYTE state[]);
-void AddRoundKey(BYTE buffer[],BYTE key[]);
+void SubBytes(BYTE buffer[]); //SubBytes
+void SubBytesInv(BYTE buffer[]); //inverse SubBytes
+void ShiftRows(BYTE buffer[]); //Shift Rows
+void ShiftRowsInv(BYTE buffer[]); //inverse Shift Rows
+void MixColumns(BYTE state[]); //MixColumns
+void MixColumnsInv(BYTE state[]); //inverse MixColumns
+void AddRoundKey(BYTE buffer[],BYTE key[]); //Add Round Key
+void KeyExpansion(BYTE rkey[],BYTE key[]); //Key Expansion
 
-void copyBuff(BYTE from[],BYTE to[]);
-void xor(BYTE *buffer,BYTE *last);
-void increase(BYTE counter[]);
 
-void enBLOCK(BYTE buffer[]);
-void deBLOCK(BYTE buffer[]);
+void copyBuff(BYTE from[],BYTE to[]); //復制buffer
+void xor(BYTE *buffer,BYTE *last); //xor
+void increase(BYTE counter[]); //CTR增量函數
 
-void enECB(char in[],char out[]);
-void deECB(char in[],char out[]);
-void enCBC(char in[],char out[]);
-void deCBC(char in[],char out[]);
-void enCFB(char in[],char out[]);
-void deCFB(char in[],char out[]);
-void CTR(char in[],char out[]);
-void enOFB(char in[],char out[]);
-void deOFB(char in[],char out[]);
+void enBLOCK(BYTE buffer[]); //块加密器
+void deBLOCK(BYTE buffer[]); //块解密器
+
+void enECB(char in[],char out[]); //ECB加密
+void deECB(char in[],char out[]); //ECB解密
+void enCBC(char in[],char out[]); //CBC加密
+void deCBC(char in[],char out[]); //CBC解密
+void enCFB(char in[],char out[]); //CFB加密
+void deCFB(char in[],char out[]); //CFB解密
+void CTR(char in[],char out[]); //CTR加密和解密
+void enOFB(char in[],char out[]); //OFB加密
+void deOFB(char in[],char out[]); //OFB解密
 
 BYTE AES_Sbox[] = { 99,124,119,123,242,107,111,197,48,1,103,43,254,215,171,
   118,202,130,201,125,250,89,71,240,173,212,162,175,156,164,114,192,183,253,
@@ -49,22 +53,22 @@ BYTE AES_Sbox[] = { 99,124,119,123,242,107,111,197,48,1,103,43,254,215,171,
   137,13,191,230,66,104,65,153,45,15,176,84,187,22 };
 BYTE AES_SboxInv[256];
 
-BYTE AES_ShiftRowTab[] = {0,5,10,15,4,9,14,3,8,13,2,7,12,1,6,11};
-BYTE h[16] = {0};
-BYTE AES_xtime[256];
-BYTE keyLen = 4;
-char inputFile[100] = {0};
-char outputFile[100] = {0};
-BYTE key1[32] = {0};
-BYTE key2[32] = {0};
-BYTE key3[32] = {0};
-char mode[5] = "ECB";
-char en = 1;
-char n = 1;
-char turn = 0;
+BYTE shiftTable[BLOCK] = {0,5,10,15,4,9,14,3,8,13,2,7,12,1,6,11};
+BYTE shiftTableInv[BLOCK] = {0,13,10,7,4,1,14,11,8,5,2,15,12,9,6,3};
+
+BYTE AES_xtime[256]; //MixColumns所使用的陣列
+BYTE keyLen = 4; //key長度
+char inputFile[100] = {0}; //輸入檔案
+char outputFile[100] = {0}; //輸出檔案
+BYTE key[32] = {0}; //key
+BYTE rkey[160] = {0}; //round key
+char mode[5] = "ECB"; //加密模式
+char en = 1; //加解密旗號
+char n = 1; //偏移量
 
 int main(int argc , char *argv[]){
-    init(argc,argv);
+    init(argc,argv); //初始化
+    //模式選擇流
     if(strcmp(mode,"ECB") == 0){
         if(en){
             enECB(inputFile,outputFile);
@@ -109,14 +113,15 @@ int main(int argc , char *argv[]){
 
 void init(int argc , char *argv[]){
     strcpy(outputFile,"output");
-    readArg(argc,argv);
-    for(int i = 0 ;i<256;i++){
+    readArg(argc,argv); //讀取參數
+    for(int i = 0 ;i<256;i++){ //初始化inverse Sbox
         AES_SboxInv[AES_Sbox[i]] = i;
     }
     for(int i = 0; i < 128; i++) {
         AES_xtime[i] = i << 1;
         AES_xtime[128 + i] = (i << 1) ^ 0x1b;
     }
+    KeyExpansion(rkey,key); //Key Expansion
 }
 
 void SubBytes(BYTE buffer[]){
@@ -136,7 +141,7 @@ void readArg(int argc, char *argv[]){
         if(arg[0] == '-'){
             switch(arg[1]){
                 case 'k':
-                    strcpy(key1,argv[++i]);
+                    strcpy(key,argv[++i]);
                     break;
                 case 'f':
                     strcpy(inputFile,argv[++i]);
@@ -174,8 +179,6 @@ void copyBuff(BYTE from[],BYTE to[]){
     }
 }
 
-BYTE shiftTable[BLOCK] = {0,5,10,15,4,9,14,3,8,13,2,7,12,1,6,11};
-
 void ShiftRows(BYTE buffer[]){
     BYTE temp[BLOCK];
     for(int i=0;i<BLOCK;i++){
@@ -184,12 +187,11 @@ void ShiftRows(BYTE buffer[]){
     copyBuff(temp,buffer);
 }
 
-BYTE reshiftTable[BLOCK] = {0,13,10,7,4,1,14,11,8,5,2,15,12,9,6,3};
 
 void ShiftRowsInv(BYTE buffer[]){
     BYTE temp[BLOCK];
     for(int i=0;i<BLOCK;i++){
-        temp[i] = buffer[reshiftTable[i]];
+        temp[i] = buffer[shiftTableInv[i]];
     }
     copyBuff(temp,buffer);
 }
@@ -222,13 +224,8 @@ void MixColumnsInv(BYTE state[]) {
 }
 
 void AddRoundKey(BYTE buffer[],BYTE key[]){
-    for(int i=turn;i<turn+BLOCK;i++){
+    for(int i=1;i<BLOCK;i++){
         buffer[i] = buffer[i] ^ key[i];
-    }
-    if(keyLen == 24){
-        turn = (turn + 8) % 16;
-    }else if(keyLen == 32){
-        turn = (turn + 16) % 32;
     }
 }
 
@@ -238,53 +235,42 @@ void xor(BYTE *buffer,BYTE *last){
     }
 }
 
-void ExpandKey(BYTE *bKey,BYTE i) {
-    BYTE Rcon[] = {1,2,4,8,16,32,64,128,27,54};
-    BYTE temp[BLOCK];
-    copyBuff(bKey,temp);
-    for(int i=0;i<4;i++){
-        temp[12 + i] = bKey[12 + i + 1];
-        temp[12 + i] = AES_Sbox[temp[12 + i]];
+void KeyExpansion(BYTE rkey[],BYTE key[]){
+    for(int i=0;i<16;i++){
+        rkey[i] = key[i];
     }
-    bKey[0] = bKey[0] ^ temp[12] ^ Rcon[i];
-    bKey[1] = bKey[1] ^ temp[13] ;
-    bKey[2] = bKey[2] ^ temp[14] ;
-    bKey[3] = bKey[3] ^ temp[15] ;
-    for(int i=0;i<4;i++){
-        bKey[4 + i] = bKey[i];
-        bKey[8 + i] = bKey[i + 4];
-        bKey[12 + i] = bKey[i + 8];
+    for(int i=16;i<160;i+=4){
+        rkey[i] = AES_Sbox[rkey[i-3]] ^ rkey[i-16];
+        rkey[i+1] = AES_Sbox[rkey[i+1-3]] ^ rkey[i+1-16];
+        rkey[i+2] = AES_Sbox[rkey[i+2-3]] ^ rkey[i+2-16];
+        rkey[i+2] = AES_Sbox[rkey[i-7]] ^ rkey[i+3-16];
     }
 }
 
 void enBLOCK(BYTE buffer[]){
-    BYTE bKey[BLOCK];
-    copyBuff(key1,bKey);
-    AddRoundKey(buffer,key1);
-    ExpandKey(bKey,0);
+    AddRoundKey(buffer,rkey);
     for(int i=1;i<10;i++){
         SubBytes(buffer);
         ShiftRows(buffer);
         MixColumns(buffer);
-        AddRoundKey(buffer,key1);
-        ExpandKey(bKey,i);
+        AddRoundKey(buffer,&rkey[i*16]);
     }
     SubBytes(buffer);
     ShiftRows(buffer);
-    AddRoundKey(buffer,key1);
+    AddRoundKey(buffer,&rkey[144]);
 }
 
 void deBLOCK(BYTE buffer[]){
-    AddRoundKey(buffer,key1);
+    AddRoundKey(buffer,&rkey[144]);
     ShiftRowsInv(buffer);
     SubBytesInv(buffer);
-    for(int i=0;i<9;i++){
-        AddRoundKey(buffer,key1);
+    for(int i=9;i>=1;i--){
+        AddRoundKey(buffer,&rkey[i*16]);
         MixColumnsInv(buffer);
         ShiftRowsInv(buffer);
         SubBytesInv(buffer);
     }
-    AddRoundKey(buffer,key1);
+    AddRoundKey(buffer,rkey);
 }
 
 void enECB(char in[],char out[]){
