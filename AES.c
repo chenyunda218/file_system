@@ -1,6 +1,11 @@
 // 來源為 http://www.codedata.com.tw/social-coding/aes/，授權為 GNU GPL 授權。
 // 本程式將來源程式擴充成5種加密模式
 
+// gcc AES.c -o aes.exe 編譯
+// 參數說明
+// -f 輸入檔案 -o 輸出檔案 -k 密碼 -e 加密 -d 解密 -m 模式
+// aes.exe -f test.7z -o out.en -k test -e -m ECB
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -117,14 +122,14 @@ void init(int argc , char *argv[]){
     for(int i = 0 ;i<256;i++){ //初始化inverse Sbox
         AES_SboxInv[AES_Sbox[i]] = i;
     }
-    for(int i = 0; i < 128; i++) {
+    for(int i = 0; i < 128; i++) { //初始化AES_xtime
         AES_xtime[i] = i << 1;
         AES_xtime[128 + i] = (i << 1) ^ 0x1b;
     }
     KeyExpansion(rkey,key); //Key Expansion
 }
 
-void SubBytes(BYTE buffer[]){
+void SubBytes(BYTE buffer[]){ 
     for(int i=0;i<BLOCK;i++){
         buffer[i] = AES_Sbox[buffer[i]];
     }
@@ -140,31 +145,31 @@ void readArg(int argc, char *argv[]){
         char *arg = argv[i];
         if(arg[0] == '-'){
             switch(arg[1]){
-                case 'k':
+                case 'k': //讀取key
                     strcpy(key,argv[++i]);
                     break;
-                case 'f':
+                case 'f': //讀取輸入檔案路徑
                     strcpy(inputFile,argv[++i]);
                     break;
-                case 'm':
+                case 'm':  //讀取模式
                     strcpy(mode,argv[++i]);
                     break;
-                case 'o':
+                case 'o': //讀取輸出檔案路徑
                     strcpy(outputFile,argv[++i]);
                     break;
-                case 'd':
+                case 'd': //設為解密旗號
                     en = 0;
                     break;
-                case 'e':
+                case 'e': //設為加密旗號
                     en = 1;
                     break;
-                case 'l':
+                case 'l': //設定rkey長度
                     keyLen = atoi(argv[++i]);
                     if(keyLen != 4 && keyLen != 6 && keyLen != 8){
                         keyLen = 4;
                     }
                     break;
-                case 'n':
+                case 'n': //設定偏移量
                     n = atoi(argv[++i]);
                     if(n>16) n = 16;
                     break;
@@ -275,11 +280,11 @@ void deBLOCK(BYTE buffer[]){
 
 void enECB(char in[],char out[]){
     FILE * filer, * filew;
-	BYTE buffer[BLOCK];
+    BYTE buffer[BLOCK];
     filer=fopen(in,"rb");
-	filew=fopen(out,"wb");
+    filew=fopen(out,"wb");
     fseek(filer,0,SEEK_END);
-	int size = ftell(filer);
+    int size = ftell(filer);
     int body = size / BLOCK;
     int tail = size % BLOCK;
     fwrite(&tail,1,1,filew);
@@ -294,17 +299,17 @@ void enECB(char in[],char out[]){
         enBLOCK(buffer);
         fwrite(buffer,1,BLOCK,filew);
     }
-	fclose(filer);
-	fclose(filew);
+    fclose(filer);
+    fclose(filew);
 }
 
 void deECB(char in[],char out[]){
     FILE * filer, * filew;
-	BYTE buffer[BLOCK];
+    BYTE buffer[BLOCK];
     filer=fopen(in,"rb");
     filew=fopen(out,"wb");
     fseek(filer,0,SEEK_END);
-	int size = ftell(filer);
+    int size = ftell(filer);
     int body = size / BLOCK - 1;
     int tail;
     rewind(filer);
@@ -319,14 +324,14 @@ void deECB(char in[],char out[]){
         deBLOCK(buffer);
         fwrite(buffer,1,tail,filew);
     }
-	fclose(filer);
-	fclose(filew);
+    fclose(filer);
+    fclose(filew);
 }
 
 void enCBC(char in[],char out[]){
     FILE * filer, * filew;
-	int numr;
-	BYTE buffer[BLOCK];
+    int numr;
+    BYTE buffer[BLOCK];
     BYTE last[BLOCK] = {2,3,1,1,1,2,3,1,1,1,2,3,3,1,1,2};
     filer=fopen(in,"rb");
     filew=fopen(out,"wb");
@@ -338,14 +343,14 @@ void enCBC(char in[],char out[]){
         }
         fwrite(buffer,1,numr,filew);
     }
-	fclose(filer);
-	fclose(filew);
+    fclose(filer);
+    fclose(filew);
 }
 
 void deCBC(char in[],char out[]){
     FILE * filer, * filew;
-	int numr,numw;
-	BYTE buffer[BLOCK];
+    int numr,numw;
+    BYTE buffer[BLOCK];
     BYTE last[BLOCK]={2,3,1,1,1,2,3,1,1,1,2,3,3,1,1,2};
     BYTE next[BLOCK]={2,3,1,1,1,2,3,1,1,1,2,3,3,1,1,2};
     filer=fopen(in,"rb");
@@ -359,8 +364,8 @@ void deCBC(char in[],char out[]){
         }
         fwrite(buffer,1,numr,filew);
     }
-	fclose(filer);
-	fclose(filew);
+    fclose(filer);
+    fclose(filew);
 }
 
 void increase(BYTE counter[]){
@@ -378,8 +383,8 @@ void increase(BYTE counter[]){
 
 void CTR(char in[],char out[]){
     FILE * filer, * filew;
-	int numr,numw;
-	BYTE buffer[BLOCK];
+    int numr,numw;
+    BYTE buffer[BLOCK];
     BYTE counter[BLOCK] = {2,3,1,1,1,2,3,1,1,1,2,3,3,1,1,2};
     BYTE last[BLOCK];
     filer=fopen(in,"rb");
@@ -393,8 +398,8 @@ void CTR(char in[],char out[]){
         }
         numw=fwrite(buffer,1,numr,filew);
     }
-	fclose(filer);
-	fclose(filew);
+    fclose(filer);
+    fclose(filew);
 }
 
 void push(BYTE *buffer,BYTE *iv){
@@ -413,8 +418,8 @@ void push(BYTE *buffer,BYTE *iv){
 
 void enCFB(char in[],char out[]){
     FILE * filer, * filew;
-	int numr,numw;
-	BYTE buffer[BLOCK];
+    int numr,numw;
+    BYTE buffer[BLOCK];
     BYTE iv[BLOCK] = {2,3,1,1,1,2,3,1,1,1,2,3,3,1,1,2};
     filer=fopen(in,"rb");
     filew=fopen(out,"wb");
@@ -426,14 +431,14 @@ void enCFB(char in[],char out[]){
         }
         fwrite(buffer,1,numr,filew);
     }
-	fclose(filer);
-	fclose(filew);
+    fclose(filer);
+    fclose(filew);
 }
 
 void deCFB(char in[],char out[]){
     FILE * filer, * filew;
-	int numr,numw;
-	BYTE buffer[BLOCK];
+    int numr,numw;
+    BYTE buffer[BLOCK];
     BYTE last[BLOCK] = {2,3,1,1,1,2,3,1,1,1,2,3,3,1,1,2};
     BYTE iv[BLOCK] = {2,3,1,1,1,2,3,1,1,1,2,3,3,1,1,2};
     filer=fopen(in,"rb");
@@ -447,14 +452,14 @@ void deCFB(char in[],char out[]){
         }
         fwrite(buffer,1,numr,filew);
     }
-	fclose(filer);
-	fclose(filew);
+    fclose(filer);
+    fclose(filew);
 }
 
 void enOFB(char in[],char out[]){
     FILE * filer, * filew;
-	int numr,numw;
-	BYTE buffer[BLOCK];
+    int numr,numw;
+    BYTE buffer[BLOCK];
     BYTE iv[BLOCK] = {2,3,1,1,1,2,3,1,1,1,2,3,3,1,1,2};
     filer=fopen(in,"rb");
     filew=fopen(out,"wb");
@@ -466,14 +471,14 @@ void enOFB(char in[],char out[]){
         }
         numw=fwrite(buffer,1,numr,filew);
     }
-	fclose(filer);
-	fclose(filew);
+    fclose(filer);
+    fclose(filew);
 }
 
 void deOFB(char in[],char out[]){
     FILE * filer, * filew;
-	int numr,numw;
-	BYTE buffer[BLOCK];
+    int numr,numw;
+    BYTE buffer[BLOCK];
     BYTE iv[BLOCK] = {2,3,1,1,1,2,3,1,1,1,2,3,3,1,1,2};
     filer=fopen(in,"rb");
     filew=fopen(out,"wb");
@@ -485,6 +490,6 @@ void deOFB(char in[],char out[]){
         }
         numw=fwrite(buffer,1,numr,filew);
     }
-	fclose(filer);
-	fclose(filew);
+    fclose(filer);
+    fclose(filew);
 }
